@@ -19,35 +19,45 @@ export function Message({ message, onActionSelect }: MessageProps) {
   return (
     <div
       className={cn(
-        'flex w-full max-w-[80%] items-end gap-2 group animate-in fade-in-50 slide-in-from-bottom-4 duration-300',
-        isUser ? 'self-end flex-row-reverse' : 'self-start'
+        'flex w-full items-start animate-in fade-in-50 slide-in-from-bottom-4 duration-300', // Ensure message stays aligned correctly
+        isUser ? 'justify-end' : 'justify-start' // Align user to right
       )}
     >
-      <Avatar className={cn('h-8 w-8 shadow', isUser ? 'ml-2' : 'mr-2')}>
-        {/* AvatarImage can be added if user/assistant images are available */}
-        {/* <AvatarImage src={isUser ? undefined : '/path/to/bot-avatar.png'} alt={message.role} /> */}
-        <AvatarFallback className={cn(isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-          {isUser ? <User size={18} /> : <Bot size={18} />}
-        </AvatarFallback>
-      </Avatar>
       <div
         className={cn(
-          'rounded-xl shadow-md break-words',
-          isUser
-            ? 'bg-primary text-primary-foreground rounded-br-none py-3 px-2' // Adjusted padding for user
-            : 'bg-card text-card-foreground border rounded-bl-none p-3' // Kept p-3 for assistant
+          // Cap message width and maintain flex layout without overflow
+          'flex items-end gap-2 max-w-[75%] sm:max-w-[70%] md:max-w-[60%]',
+          isUser ? 'flex-row-reverse' : ''
         )}
       >
-        {message.type === 'text' ? (
-          <div className="prose prose-sm max-w-none dark:prose-invert">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
-        ) : message.type === 'action_card' && message.actionCardData ? (
-          <ActionCard data={message.actionCardData} onActionSelect={onActionSelect} />
-        ) : null}
-         <p className="text-xs mt-1 opacity-70">
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </p>
+        <Avatar className="h-8 w-8 shadow">
+          <AvatarFallback
+            className={cn(
+              isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {isUser ? <User size={18} /> : <Bot size={18} />}
+          </AvatarFallback>
+        </Avatar>
+        <div
+          className={cn(
+            'rounded-xl shadow-md break-words overflow-hidden', //Prevent horizontal overflow
+            isUser
+              ? 'bg-primary text-primary-foreground rounded-br-none p-3'
+              : 'bg-card text-card-foreground border rounded-bl-none p-3'
+          )}
+        >
+          {message.type === 'text' ? (
+            <div className="prose prose-sm max-w-none dark:prose-invert break-words [&_pre]:overflow-x-auto [&_code]:break-words">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          ) : message.type === 'action_card' && message.actionCardData ? (
+            <ActionCard data={message.actionCardData} onActionSelect={onActionSelect} />
+          ) : null}
+          <p className="text-xs mt-1 opacity-70">
+            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
       </div>
     </div>
   );

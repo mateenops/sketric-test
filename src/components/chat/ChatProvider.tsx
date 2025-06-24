@@ -114,7 +114,7 @@ interface ChatProviderProps {
 
 export function ChatProvider({
   children,
-  endpoint = '/api/responses',
+  endpoint = '/api/chat-sse',
   agent = 'sketric_agent',
 }: ChatProviderProps) {
   const [state, dispatch] = useReducer(chatReducer, initialState);
@@ -128,74 +128,95 @@ export function ChatProvider({
   }, [state.threadId]);
 
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+  if (!text.trim()) return;
 
-    const userMessageId = nanoid();
-    dispatch({ 
-      type: 'ADD_USER_MESSAGE', 
-      payload: { text: text.trim(), id: userMessageId } 
-    });
+  const userMessageId = nanoid();
+  dispatch({ 
+    type: 'ADD_USER_MESSAGE', 
+    payload: { text: text.trim(), id: userMessageId } 
+  });
 
-    try {
-      dispatch({ type: 'RUN_STARTED', payload: { runId: nanoid() } });
+  const assistantMessageId = nanoid();
+  dispatch({
+    type: 'TEXT_MESSAGE_START',
+    payload: { messageId: assistantMessageId, role: 'assistant', timestamp: Date.now() }
+  });
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instructions: `You are the Sketric AI Assistant, a helpful AI assistant for Sketric - a software development company. You specialize in helping with software development questions, technical interviews, and programming challenges. Be friendly, professional, and concise in your responses.`,
-          input: text.trim()
-        })
-      });
+  try {
+    dispatch({ type: 'RUN_STARTED', payload: { runId: nanoid() } });
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorData}`);
-      }
+    const url = `${endpoint}?input=${encodeURIComponent(text)}&instructions=${encodeURIComponent("You are the Sketric AI Assistant, a helpful AI assistant for Sketric - a software development company. You specialize in helping with software development questions, technical interviews, and programming challenges. Be friendly, professional, and concise in your responses.")}`;
 
-      const data = await response.json();
-      
-      // Create assistant message from response
-      const assistantMessageId = nanoid();
-      dispatch({
-        type: 'TEXT_MESSAGE_START',
-        payload: { messageId: assistantMessageId, role: 'assistant', timestamp: Date.now() }
-      });
+    const response = await fetch(url);
 
-      // Extract content from OpenAI responses format
-      let content = '';
-      if (data.output && Array.isArray(data.output)) {
-        content = data.output.map((msg: any) => 
-          msg.content?.map((c: any) => c.text || '').join('') || ''
-        ).join('');
-      } else if (typeof data.output === 'string') {
-        content = data.output;
-      } else {
-        content = 'No response received';
-      }
-
-      dispatch({
-        type: 'TEXT_MESSAGE_CONTENT',
-        payload: { messageId: assistantMessageId, delta: content, timestamp: Date.now() }
-      });
-
-      dispatch({
-        type: 'TEXT_MESSAGE_END',
-        payload: { messageId: assistantMessageId, timestamp: Date.now() }
-      });
-
-      dispatch({ type: 'RUN_FINISHED' });
-
-    } catch (error) {
-      console.error('SketricChat: Failed to send message:', error);
-      dispatch({ type: 'STREAM_ERROR', payload: { message: error instanceof Error ? error.message : 'Unknown error' } });
-      toast({ 
-        title: "Chat Error", 
-        description: "Failed to send message. Please try again.", 
-        variant: "destructive" 
-      });
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP ${response.status}`);
     }
-  }, [endpoint, toast]);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    let eventType: string | null = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('event:')) {
+          eventType = line.replace('event: ', '').trim();
+        } else if (line.startsWith('data:')) {
+          const dataStr = line.replace('data: ', '').trim();
+
+          if (eventType === 'end') {
+            dispatch({
+              type: 'TEXT_MESSAGE_END',
+              payload: { messageId: assistantMessageId, timestamp: Date.now() }
+            });
+            dispatch({ type: 'RUN_FINISHED' });
+          } else if (eventType === 'error') {
+            try {
+              const errorData = JSON.parse(dataStr);
+              throw new Error(errorData.message || 'Unknown SSE error');
+            } catch (err) {
+              throw new Error(dataStr);
+            }
+          } else {
+            // default "message" type
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.delta) {
+                dispatch({
+                  type: 'TEXT_MESSAGE_CONTENT',
+                  payload: { messageId: assistantMessageId, delta: parsed.delta, timestamp: Date.now() }
+                });
+              }
+            } catch (e) {
+              console.warn('Failed to parse SSE data:', dataStr);
+            }
+          }
+
+          eventType = null; // Reset after each full message
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('SketricChat SSE Error:', error);
+    dispatch({
+      type: 'STREAM_ERROR',
+      payload: { message: error instanceof Error ? error.message : 'Unknown error' }
+    });
+    toast({
+      title: "Chat Error",
+      description: "Failed to send message. Please try again.",
+      variant: "destructive"
+    });
+  }
+}, [toast]);
+
 
   const toggleWidget = useCallback(() => {
     dispatch({ type: 'TOGGLE_WIDGET' });

@@ -25,7 +25,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
         <ChatProvider 
-          endpoint="/api/responses"
+          endpoint="/api/chat-sse"
           agent="sketric_agent"
         >
           <div className="flex-grow">{children}</div>
