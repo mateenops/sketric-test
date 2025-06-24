@@ -5,6 +5,7 @@ import { ChatProvider } from '@/components/chat/ChatProvider'; // Updated path
 import { ChatWidget } from '@/components/chat/ChatWidget';     // Updated path
 import { FloatingButton } from '@/components/chat/FloatingButton'; // Updated path
 import './globals.css';
+import CanvasFlow from '@/components/canvas';
 
 export const metadata: Metadata = {
   title: 'Sketric Assistant',
@@ -24,6 +25,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
+        <CanvasFlow />
         <ChatProvider 
           endpoint="/api/chat-sse"
           agent="sketric_agent"
